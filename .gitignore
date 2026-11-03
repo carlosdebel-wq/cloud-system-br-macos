@@ -1,0 +1,18 @@
+/entrega/
+/binaries/
+/tools/
+/work/
+.DS_Store
+__pycache__/
+*.pyc
+# Local preparation helpers refer to the original Windows workspace, not CI.
+/packaging/prepare_source.py
+/packaging/finalize_source.py
+/packaging/prepare_documentation.py
+/packaging/verify_and_archive.py
+# Never publish signing identities or credentials.
+*.p12
+*.pfx
+*.key
+.env
+.env.*

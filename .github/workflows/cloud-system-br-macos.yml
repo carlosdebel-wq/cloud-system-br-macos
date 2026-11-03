@@ -1,0 +1,99 @@
+name: Cloud System BR - macOS
+
+# No push/pull_request/scheduled trigger: publishing this file does not start a runner.
+on:
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: 'Arquitetura do Mac'
+        type: choice
+        required: true
+        default: arm64
+        options:
+          - arm64
+          - intel
+          - both
+      free_quota_confirmed:
+        description: 'Conferi franquia disponivel e bloqueio de gastos no GitHub antes de executar'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-system-br-macos
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: ${{ inputs.free_quota_confirmed == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Obter fontes
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Conferir identidade e arquivos de compilacao
+        run: python3 packaging/verify_ci_inputs.py
+      - name: Selecionar arquiteturas
+        id: matrix
+        env:
+          REQUESTED_ARCH: ${{ inputs.architecture }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          choices = {
+              "arm64": {"architecture": "arm64", "runner": "macos-15"},
+              "intel": {"architecture": "intel", "runner": "macos-15-intel"},
+          }
+          requested = os.environ["REQUESTED_ARCH"]
+          selected = list(choices.values()) if requested == "both" else [choices[requested]]
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("matrix=" + json.dumps({"include": selected}) + "\n")
+          PY
+
+  build:
+    needs: prepare
+    name: macOS - ${{ matrix.architecture }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    env:
+      SIGN_PACKAGE: 'False'
+      CMAKE_BUILD_PARALLEL_LEVEL: '2'
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Obter fontes
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Preparar Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Compilar e gerar candidato DMG
+        shell: pwsh
+        run: ./packaging/compilar-no-mac.ps1 -Architecture '${{ matrix.architecture }}'
+      - name: Conferir aplicativo e DMG
+        shell: bash
+        run: python3 packaging/verify_built_macos.py 'binaries/${{ matrix.architecture }}'
+      - name: Disponibilizar DMG e verificacoes
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: Cloud-System-BR-macOS-${{ matrix.architecture }}-${{ github.run_number }}
+          path: |
+            binaries/${{ matrix.architecture }}/*.dmg
+            binaries/${{ matrix.architecture }}/*.sha256
+            binaries/${{ matrix.architecture }}/*.json
+            binaries/${{ matrix.architecture }}/LEIA-ME-DISTRIBUICAO.md
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
