@@ -13,11 +13,6 @@ on:
           - arm64
           - intel
           - both
-      free_quota_confirmed:
-        description: 'Conferi franquia disponivel e bloqueio de gastos no GitHub antes de executar'
-        type: boolean
-        required: true
-        default: false
 
 permissions:
   contents: read
@@ -28,7 +23,7 @@ concurrency:
 
 jobs:
   prepare:
-    if: ${{ inputs.free_quota_confirmed == true }}
+    if: ${{ github.event.repository.private == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -59,6 +54,8 @@ jobs:
 
   build:
     needs: prepare
+    permissions:
+      contents: write
     name: macOS - ${{ matrix.architecture }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
@@ -85,15 +82,12 @@ jobs:
       - name: Conferir aplicativo e DMG
         shell: bash
         run: python3 packaging/verify_built_macos.py 'binaries/${{ matrix.architecture }}'
-      - name: Disponibilizar DMG e verificacoes
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: Cloud-System-BR-macOS-${{ matrix.architecture }}-${{ github.run_number }}
-          path: |
-            binaries/${{ matrix.architecture }}/*.dmg
-            binaries/${{ matrix.architecture }}/*.sha256
-            binaries/${{ matrix.architecture }}/*.json
-            binaries/${{ matrix.architecture }}/LEIA-ME-DISTRIBUICAO.md
-          if-no-files-found: error
-          retention-days: 1
-          compression-level: 0
+      - name: Disponibilizar instalador em release de teste
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ARCH: ${{ matrix.architecture }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          gh release create "macos-${ARCH}-${RUN_ID}" binaries/${ARCH}/*.dmg binaries/${ARCH}/*.sha256 binaries/${ARCH}/*.json "binaries/${ARCH}/LEIA-ME-DISTRIBUICAO.md" --prerelease --title "Cloud System BR macOS ${ARCH}" --notes "Versao de teste. Assinatura ad-hoc, sem notarizacao Apple. Login e sincronizacao requerem validacao em Mac real."

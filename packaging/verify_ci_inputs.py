@@ -27,7 +27,7 @@ assert '  workflow_dispatch:' in workflow
 assert not re.search(r'^  (push|pull_request|schedule):', workflow, re.M)
 for reference in re.findall(r'uses:\s*([^\s#]+)', workflow):
     assert reference.startswith('actions/') and re.fullmatch(r'actions/[\w-]+@[0-9a-f]{40}', reference), reference
-assert 'free_quota_confirmed == true' in workflow
+assert 'github.event.repository.private == false' in workflow
 print(json.dumps({'status': 'preflight-passed', 'brand': 'Cloud System BR',
                   'compiled_on_macos': False, 'server': 'https://cloud.systembr.com.br/',
                   'icon_sha256': hashlib.sha256(icon).hexdigest(),
